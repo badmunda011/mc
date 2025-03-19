@@ -16,9 +16,9 @@ class Config(object):
     OWNER_ID = getenv("OWNER_ID", "")                  # enter your id here
 
     # optional config variables
-    BLACK_IMG = getenv("BLACK_IMG", "")        # black image for progress
+    BLACK_IMG = getenv("BLACK_IMG", "https://files.catbox.moe/0gx8hh.jpg")        # black image for progress
     BOT_NAME = getenv("BOT_NAME", "@ShizuuMusicBot")   # dont put fancy texts here.
-    BOT_PIC = getenv("BOT_PIC", "")           # put direct link to image here
+    BOT_PIC = getenv("BOT_PIC", "https://files.catbox.moe/0gx8hh.jpg")           # put direct link to image here
     LEADERBOARD_TIME = getenv("LEADERBOARD_TIME", "3:00")   # time in 24hr format for leaderboard broadcast
     LYRICS_API = getenv("LYRICS_API", None)             # from https://docs.genius.com/
     MAX_FAVORITES = int(getenv("MAX_FAVORITES", 30))    # max number of favorite tracks
