@@ -1,0 +1,71 @@
+{
+	"name": "PbxMusic",
+	"description": "A telegram voice chat music player bot by Badhacker98, coded in python using Pyrogram and PyTgCalls",
+	"logo": "https://files.catbox.moe/zyg2nv.jpg",
+	"keywords": [
+		"telegram",
+		"musicbot",
+		"python",
+		"pyrogram",
+		"pytgcalls",
+		"Pbxbot",
+		"modular",
+		"productivity",
+		"music",
+		"Pbxbot"
+	],
+	"repository": "https://github.com/Badhacker98/PbxMusic",
+	"env": {
+        "API_HASH": {
+            "description": "Get this value from my.telegram.org",
+            "value": ""
+        },
+		"API_ID": {
+			"description": "Get this value from my.telegram.org",
+			"value": ""
+		},
+		"BOT_NAME": {
+			"description": "Name of bot to display on Thumbnail. Don't use fancy texts. Use plain text only.",
+			"value": "@ShizuuMusicBot"
+		},
+		"BOT_TOKEN": {
+			"description": "Make a bot from @BotFather and paste the bot token here.",
+			"value": ""
+		},
+        "DATABASE_URL": {
+            "description": "Paste the mongodb url.",
+            "value": ""
+        },
+		"LOGGER_ID": {
+			"description": "Channel/group id to log error/info messages.",
+			"value": ""
+		},
+        "OWNER_ID": {
+            "description": "Your telegram user id.",
+            "value": ""
+        },
+        "PBXBOT_SESSION": {
+            "description": "Paste pyrogram session string.",
+            "value": ""
+        },
+		"HEROKU_API": {
+			"description": "Go to https://dashboard.heroku.com/account, scroll down and press Reveal API. Required for updater to work.",
+			"value": ""
+		},
+		"HEROKU_APP": {
+			"description": "The Value of App Name you filled in right on top. Required for updater to work.",
+			"value": ""
+		}
+	},
+	"buildpacks": [
+		{
+			"url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest"
+		},
+		{
+			"url": "https://github.com/Badmunda98/heroku-buildpack-nodejs"
+		},
+		{
+			"url": "heroku/python"
+		}
+	]
+}
