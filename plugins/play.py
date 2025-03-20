@@ -17,7 +17,6 @@ from Music.utils.queue import Queue
 from Music.utils.thumbnail import thumb
 from Music.utils.youtube import ytube
 
-
 @Pbxbot.app.on_message(
     filters.command(["play", "vplay", "fplay", "fvplay"])
     & filters.group
@@ -147,7 +146,7 @@ async def play_music(_, message: Message, context: dict):
         "vc_type": "video" if video else "voice",
         "force": force,
     }
-    await player.play(Pbx, context)
+    await player.play(Pbx, context, thumbnail=True)
 
 
 @Pbxbot.app.on_message(
@@ -185,8 +184,8 @@ async def playing(_, message: Message):
         except Exception:
             pass
     Config.PLAYER_CACHE[chat_id] = sent
-
-
+    
+    
 @Pbxbot.app.on_message(
     filters.command(["queue", "que", "q"]) & filters.group & ~Config.BANNED_USERS
 )
