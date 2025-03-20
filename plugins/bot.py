@@ -68,8 +68,9 @@ async def start(_, message: Message):
                     reply_markup=InlineKeyboardMarkup(Buttons.help_pm_markup()),
                 )
                 return
-        await message.reply_text(
-            TEXTS.START_PM.format(
+        await message.reply_photo(
+            Config.START_IMG_URL,
+            caption=TEXTS.START_PM.format(
                 message.from_user.first_name,
                 Pbxbot.app.mention,
                 Pbxbot.app.username,
@@ -126,4 +127,4 @@ async def sysinfo(_, message: Message):
             Pbxbot.app.mention,
         ),
         reply_markup=InlineKeyboardMarkup(Buttons.close_markup()),
-    )
+                )
