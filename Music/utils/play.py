@@ -49,7 +49,7 @@ class Player:
             return None
         return url[offset : offset + length]
 
-    async def play(self, message: Message, context: dict, edit: bool = True, thumbnail: bool = False):
+    async def play(self, message: Message, context: dict, edit: bool = True):
         (
             chat_id,
             user_id,
