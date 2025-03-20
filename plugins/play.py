@@ -35,7 +35,7 @@ async def play_music(_, message: Message, context: dict):
             await db.update_user(user_id, "user_name", user_name)
         except:
             pass
-    Pbx = await message.reply_text("Processing ...")
+    Pbx = await message.reply_text("ᴘʙx ᴍᴜsɪᴄ ʙᴏᴛ")
     # initialise variables
     video, force, url, tgaud, tgvid = context.values()
     play_limit = formatter.mins_to_secs(f"{Config.PLAY_LIMIT}:00")
@@ -52,7 +52,7 @@ async def play_music(_, message: Message, context: dict):
             return await Pbx.edit(
                 f"Audio duration limit of {Config.PLAY_LIMIT} minutes exceeded."
             )
-        await Pbx.edit("Downloading ...")
+        await Pbx.edit("ᴘʀᴏᴄᴇssɪɴɢ...")
         file_path = await Pbxbot.app.download_media(message.reply_to_message)
         context = {
             "chat_id": message.chat.id,
