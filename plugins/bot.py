@@ -76,7 +76,6 @@ async def start(_, message: Message):
                 Pbxbot.app.username,
             ),
             reply_markup=InlineKeyboardMarkup(Buttons.start_pm_markup(Pbxbot.app.username)),
-            disable_web_page_preview=True,
         )
     elif message.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
         await message.reply_text(TEXTS.START_GC)
@@ -127,4 +126,4 @@ async def sysinfo(_, message: Message):
             Pbxbot.app.mention,
         ),
         reply_markup=InlineKeyboardMarkup(Buttons.close_markup()),
-                )
+            )
