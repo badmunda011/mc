@@ -68,7 +68,7 @@ class PbxMusic(PyTgCalls):
         LOGS.info(
             "\x3e\x3e\x20\x42\x6f\x6f\x74\x69\x6e\x67\x20\x50\x79\x54\x67\x43\x61\x6c\x6c\x73\x20\x43\x6c\x69\x65\x6e\x74\x2e\x2e\x2e"
         )
-        if Config.PBXBOT_SESSION:
+        if Config.PbxBOT_SESSION:
             await self.music.start()
             LOGS.info(
                 "\x3e\x3e\x20\x42\x6f\x6f\x74\x65\x64\x20\x50\x79\x54\x67\x43\x61\x6c\x6c\x73\x20\x43\x6c\x69\x65\x6e\x74\x21"
@@ -182,11 +182,6 @@ class PbxMusic(PyTgCalls):
                 to_stream = await ytube.download(
                     video_id, True, True if vc_type == "video" else False
                 )
-
-            # File existence check
-            if not os.path.exists(to_stream):
-                raise FileNotFoundError(f"File not found: {to_stream}")
-
             if vc_type == "video":
                 input_stream = AudioVideoPiped(
                     to_stream, MediumQualityAudio(), MediumQualityVideo()
@@ -244,6 +239,7 @@ class PbxMusic(PyTgCalls):
                 raise ChangeVCException(f"[ChangeVCException]: {e}")
 
     async def join_vc(self, chat_id: int, file_path: str, video: bool = False):
+        # define input stream
         if video:
             input_stream = AudioVideoPiped(
                 file_path, MediumQualityAudio(), MediumQualityVideo()
@@ -251,6 +247,7 @@ class PbxMusic(PyTgCalls):
         else:
             input_stream = AudioPiped(file_path, MediumQualityAudio())
 
+        # join vc
         try:
             await self.music.join_group_call(
                 chat_id, input_stream, stream_type=StreamType().pulse_stream
@@ -280,6 +277,16 @@ class PbxMusic(PyTgCalls):
         users = await self.vc_participants(chat_id)
         user_ids = [user.user_id for user in users]
         await self.autoend(chat_id, user_ids)
+
+    async def autoclean(self, file: str):
+        # Ensure file is a string
+        if isinstance(file, str):
+            try:
+                os.remove(file)
+                os.remove(f"downloads/{file}.webm")
+                os.remove(f"downloads/{file}.mp4")
+            except:
+                pass
 
     async def join_gc(self, chat_id: int):
         try:
