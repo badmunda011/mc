@@ -26,9 +26,9 @@ from Music.utils.queue import Queue
 from Music.utils.thumbnail import thumb
 from Music.utils.youtube import ytube
 
-from .clients import Pbxbot
-from .database import db
-from .logger import LOGS
+from Music.core.clients import Pbxbot
+from Music.core.database import db
+from Music.core.logger import LOGS
 
 
 async def __clean__(chat_id: int, force: bool):
