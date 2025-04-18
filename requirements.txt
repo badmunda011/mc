@@ -43,4 +43,4 @@ websockets==11.0.3
 yarl==1.9.2
 youtube-search
 youtube-search-python
-yt-dlp==2024.12.23.232812.dev0
+yt-dlp~=2025.3.31
