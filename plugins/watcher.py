@@ -1,212 +1,331 @@
-import asyncio
 import datetime
+import os
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from pyrogram import filters
-from pyrogram.types import Message
-from pytgcalls.types import JoinedGroupCallParticipant, LeftGroupCallParticipant, Update
-from pytgcalls.types.stream import StreamAudioEnded
+from pyrogram.enums import ChatMemberStatus
+from pyrogram.errors import (
+    ChatAdminRequired,
+    UserAlreadyParticipant,
+    UserNotParticipant,
+)
+from pyrogram.types import InlineKeyboardMarkup
+from pytgcalls import PyTgCalls, StreamType
+from pytgcalls.exceptions import AlreadyJoinedError, NoActiveGroupCall
+from pytgcalls.types.input_stream import AudioPiped, AudioVideoPiped
+from pytgcalls.types.input_stream.quality import MediumQualityAudio, MediumQualityVideo
 
 from config import Config
-from Music.core.calls import Pbxmusic
-from Music.core.clients import Pbxbot
-from Music.core.database import db
-from Music.core.logger import LOGS
 from Music.helpers.buttons import Buttons
-from Music.utils.leaderboard import leaders
+from Music.helpers.strings import TEXTS
+from Music.utils.exceptions import (
+    ChangeVCException,
+    JoinGCException,
+    JoinVCException,
+    UserException,
+)
 from Music.utils.queue import Queue
+from Music.utils.thumbnail import thumb
+from Music.utils.youtube import ytube
+
+from .clients import Pbxbot
+from .database import db
+from .logger import LOGS
 
 
-@Pbxbot.app.on_message(filters.private, group=2)
-async def new_users(_, msg: Message):
-    chat_id = msg.from_user.id
-    user_name = msg.from_user.first_name
-    if not await db.is_user_exist(chat_id):
-        BOT_USERNAME = Pbxbot.app.username
-        await db.add_user(chat_id, user_name)
-        if Config.LOGGER_ID:
-            await Pbxbot.logit(
-                "newuser",
-                f"**⤷ User:** {msg.from_user.mention(style='md')}\n**⤷ ID:** `{chat_id}`\n__⤷ Started @{BOT_USERNAME} !!__",
-            )
-        else:
-            LOGS.info(f"#NewUser: \n\nName: {user_name} \nID: {chat_id}")
+async def __clean__(chat_id: int, force: bool):
+    if force:
+        Queue.rm_queue(chat_id, 0)
     else:
+        Queue.clear_queue(chat_id)
+    await db.remove_active_vc(chat_id)
+
+
+class PbxMusic(PyTgCalls):
+    def __init__(self):
+        self.music = PyTgCalls(Pbxbot.user)
+        self.audience = {}
+
+    async def autoend(self, chat_id: int, users: list):
+        autoend = await db.get_autoend()
+        if autoend:
+            if len(users) == 1:
+                get = await Pbxbot.app.get_users(users[0])
+                if get.id == Pbxbot.user.id:
+                    db.inactive[chat_id] = datetime.datetime.now() + datetime.timedelta(
+                        minutes=5
+                    )
+            else:
+                db.inactive[chat_id] = {}
+
+    async def autoclean(self, file: str):
+        # dirty way. but works :)
         try:
-            await db.update_user(chat_id, "user_name", user_name)
+            os.remove(file)
+            os.remove(f"downloads/{file}.webm")
+            os.remove(f"downloads/{file}.mp4")
         except:
             pass
-    await msg.continue_propagation()
 
-
-@Pbxbot.app.on_message(filters.group, group=3)
-async def new_users(_, msg: Message):
-    chat_id = msg.chat.id
-    if not await db.is_chat_exist(chat_id):
-        BOT_USERNAME = Pbxbot.app.username
-        await db.add_chat(chat_id)
-        if Config.LOGGER_ID:
-            await Pbxbot.logit(
-                "newchat",
-                f"**⤷ Chat Title:** {msg.chat.title} \n**⤷ Chat UN:** @{msg.chat.username or None}) \n**⤷ Chat ID:** `{chat_id}` \n__⤷ ADDED @{BOT_USERNAME} !!__",
-            )
-        else:
+    async def start(self):
+        LOGS.info(
+            "\x3e\x3e\x20\x42\x6f\x6f\x74\x69\x6e\x67\x20\x50\x79\x54\x67\x43\x61\x6c\x6c\x73\x20\x43\x6c\x69\x65\x6e\x74\x2e\x2e\x2e"
+        )
+        if Config.PBXBOT_SESSION:
+            await self.music.start()
             LOGS.info(
-                f"#NEWCHAT: \n\nChat Title: {msg.chat.title} \nChat UN: @{msg.chat.username}) \nChat ID: {chat_id} \n\nADDED @{BOT_USERNAME} !!",
+                "\x3e\x3e\x20\x42\x6f\x6f\x74\x65\x64\x20\x50\x79\x54\x67\x43\x61\x6c\x6c\x73\x20\x43\x6c\x69\x65\x6e\x74\x21"
             )
-    await msg.continue_propagation()
-
-
-@Pbxbot.app.on_message(filters.video_chat_ended, group=4)
-async def vc_end(_, msg: Message):
-    chat_id = msg.chat.id
-    try:
-        await Pbxmusic.leave_vc(chat_id)
-        await db.set_loop(chat_id, 0)
-    except:
-        pass
-    await msg.continue_propagation()
-
-
-@Pbxmusic.music.on_kicked()
-@Pbxmusic.music.on_left()
-async def end_streaming(_, chat_id: int):
-    await Pbxmusic.leave_vc(chat_id)
-    await db.set_loop(chat_id, 0)
-
-
-@Pbxmusic.music.on_stream_end()
-async def changed(_, update: Update):
-    if isinstance(update, StreamAudioEnded):
-        await Pbxmusic.change_vc(update.chat_id)
-
-
-@Pbxmusic.music.on_participants_change()
-async def members_change(_, update: Update):
-    if not isinstance(update, JoinedGroupCallParticipant) and not isinstance(
-        update, LeftGroupCallParticipant
-    ):
-        return
-    try:
-        chat_id = update.chat_id
-        audience = Pbxmusic.audience.get(chat_id)
-        users = await Pbxmusic.vc_participants(chat_id)
-        user_ids = [user.user_id for user in users]
-        if not audience:
-            await Pbxmusic.autoend(chat_id, user_ids)
         else:
-            new = (
-                audience + 1
-                if isinstance(update, JoinedGroupCallParticipant)
-                else audience - 1
+            LOGS.error(
+                "\x3e\x3e\x20\x50\x79\x54\x67\x43\x61\x6c\x6c\x73\x20\x43\x6c\x69\x65\x6e\x74\x20\x6e\x6f\x74\x20\x62\x6f\x6f\x74\x65\x64\x21"
             )
-            Pbxmusic.audience[chat_id] = new
-            await Pbxmusic.autoend(chat_id, user_ids)
-    except:
-        return
+            quit(1)
 
-async def change_vc(self, chat_id: int):
-    try:
-        get = Queue.get_queue(chat_id)
-        if not get:
-            return await self.leave_vc(chat_id)
+    async def ping(self):
+        pinged = await self.music.ping
+        return pinged
 
-        loop = await db.get_loop(chat_id)
-        if loop == 0:
-            file = Queue.rm_queue(chat_id, 0)
-            await self.autoclean(file)
+    async def vc_participants(self, chat_id: int):
+        users = await self.music.get_participants(chat_id)
+        return users
+
+    async def mute_vc(self, chat_id: int):
+        await self.music.mute_stream(chat_id)
+
+    async def unmute_vc(self, chat_id: int):
+        await self.music.unmute_stream(chat_id)
+
+    async def pause_vc(self, chat_id: int):
+        await self.music.pause_stream(chat_id)
+
+    async def resume_vc(self, chat_id: int):
+        await self.music.resume_stream(chat_id)
+
+    async def leave_vc(self, chat_id: int, force: bool = False):
+        try:
+            await __clean__(chat_id, force)
+            await self.music.leave_group_call(chat_id)
+        except:
+            pass
+        previous = Config.PLAYER_CACHE.get(chat_id)
+        if previous:
+            try:
+                await previous.delete()
+            except:
+                pass
+
+    async def seek_vc(self, context: dict):
+        chat_id, file_path, duration, to_seek, video = context.values()
+        if video:
+            input_stream = AudioVideoPiped(
+                file_path,
+                MediumQualityAudio(),
+                MediumQualityVideo(),
+                additional_ffmpeg_parameters=f"-ss {to_seek} -to {duration}",
+            )
         else:
-            await db.set_loop(chat_id, loop - 1)
-
-        get = Queue.get_queue(chat_id)
-        if not get:
-            return await self.leave_vc(chat_id)
-
-        chat_id = get[0]["chat_id"]
-        queue = get[0]["file"]
-        title = get[0]["title"]
-        vc_type = get[0]["vc_type"]
-        video_id = get[0]["video_id"]
-
-        if not os.path.exists(queue):
-            raise ChangeVCException(f"File not found: {queue}")
-
-        if vc_type == "video":
-            input_stream = AudioVideoPiped(queue, MediumQualityAudio(), MediumQualityVideo())
-        else:
-            input_stream = AudioPiped(queue, MediumQualityAudio())
-
+            input_stream = AudioPiped(
+                file_path,
+                MediumQualityAudio(),
+                additional_ffmpeg_parameters=f"-ss {to_seek} -to {duration}",
+            )
         await self.music.change_stream(chat_id, input_stream)
 
-    except FileNotFoundError as e:
-        LOGS.error(f"File not found: {e}")
-        return await self.leave_vc(chat_id)
+    async def invited_vc(self, chat_id: int):
+        try:
+            await Pbxbot.app.send_message(
+                chat_id, "The Bot will join vc only when you give something to play!"
+            )
+        except:
+            return
 
-    except Exception as e:
-        LOGS.error(e)
-        return await self.leave_vc(chat_id)
+    async def replay_vc(self, chat_id: int, file_path: str, video: bool = False):
+        if video:
+            input_stream = AudioVideoPiped(
+                file_path, MediumQualityAudio(), MediumQualityVideo()
+            )
+        else:
+            input_stream = AudioPiped(file_path, MediumQualityAudio())
+        await self.music.change_stream(chat_id, input_stream)
 
-
-async def update_played():
-    while not await asyncio.sleep(1):
-        active_chats = await db.get_active_vc()
-        for x in active_chats:
-            chat_id = int(x["chat_id"])
-            if chat_id == 0:
-                continue
-            is_paused = await db.get_watcher(chat_id, "pause")
-            if is_paused:
-                continue
-            que = Queue.get_queue(chat_id)
-            if que == []:
-                continue
-            Queue.update_duration(chat_id, 1, 1)
-
-
-asyncio.create_task(update_played())
-
-
-async def end_inactive_vc():
-    while not await asyncio.sleep(10):
-        for chat_id in db.inactive:
-            dur = db.inactive.get(chat_id)
-            if dur == {}:
-                continue
-            if datetime.datetime.now() > dur:
-                if not await db.is_active_vc(chat_id):
-                    db.inactive[chat_id] = {}
-                    continue
-                db.inactive[chat_id] = {}
-                try:
-                    await Pbxmusic.leave_vc(chat_id)
-                except:
-                    continue
-                try:
-                    await Pbxbot.app.send_message(
-                        chat_id,
-                        "⏹️ **Inactive VC:** Streaming has been stopped!",
+    async def change_vc(self, chat_id: int):
+        try:
+            get = Queue.get_queue(chat_id)
+            if get == []:
+                return await self.leave_vc(chat_id)
+            loop = await db.get_loop(chat_id)
+            if loop == 0:
+                file = Queue.rm_queue(chat_id, 0)
+                await self.autoclean(file)
+            else:
+                await db.set_loop(chat_id, loop - 1)
+        except Exception as e:
+            LOGS.error(e)
+            return await self.leave_vc(chat_id)
+        get = Queue.get_queue(chat_id)
+        if get == []:
+            return await self.leave_vc(chat_id)
+        chat_id = get[0]["chat_id"]
+        duration = get[0]["duration"]
+        queue = get[0]["file"]
+        title = get[0]["title"]
+        user_id = get[0]["user_id"]
+        vc_type = get[0]["vc_type"]
+        video_id = get[0]["video_id"]
+        try:
+            user = (await Pbxbot.app.get_users(user_id)).mention(style="md")
+        except:
+            user = get[0]["user"]
+        if queue:
+            tg = True if video_id == "telegram" else False
+            if tg:
+                to_stream = queue
+            else:
+                to_stream = await ytube.download(
+                    video_id, True, True if vc_type == "video" else False
+                )
+            if vc_type == "video":
+                input_stream = AudioVideoPiped(
+                    to_stream, MediumQualityAudio(), MediumQualityVideo()
+                )
+            else:
+                input_stream = AudioPiped(to_stream, MediumQualityAudio())
+            try:
+                photo = thumb.generate((359), (297, 302), video_id)
+                await self.music.change_stream(int(chat_id), input_stream)
+                btns = Buttons.player_markup(
+                    chat_id,
+                    "None" if video_id == "telegram" else video_id,
+                    Pbxbot.app.username,
+                )
+                if photo:
+                    sent = await Pbxbot.app.send_photo(
+                        int(chat_id),
+                        photo,
+                        TEXTS.PLAYING.format(
+                            Pbxbot.app.mention,
+                            title,
+                            duration,
+                            user,
+                        ),
+                        reply_markup=InlineKeyboardMarkup(btns),
                     )
-                except:
-                    continue
+                    os.remove(photo)
+                else:
+                    sent = await Pbxbot.app.send_message(
+                        int(chat_id),
+                        TEXTS.PLAYING.format(
+                            Pbxbot.app.mention,
+                            title,
+                            duration,
+                            user,
+                        ),
+                        disable_web_page_preview=True,
+                        reply_markup=InlineKeyboardMarkup(btns),
+                    )
+                previous = Config.PLAYER_CACHE.get(chat_id)
+                if previous:
+                    try:
+                        await previous.delete()
+                    except:
+                        pass
+                Config.PLAYER_CACHE[chat_id] = sent
+                await db.update_songs_count(1)
+                await db.update_user(user_id, "songs_played", 1)
+                chat_name = (await Pbxbot.app.get_chat(chat_id)).title
+                await Pbxbot.logit(
+                    f"play {vc_type}",
+                    f"**⤷ Song:** `{title}` \n**⤷ Chat:** {chat_name} [`{chat_id}`] \n**⤷ User:** {user}",
+                )
+            except Exception as e:
+                raise ChangeVCException(f"[ChangeVCException]: {e}")
+
+    async def join_vc(self, chat_id: int, file_path: str, video: bool = False):
+        # define input stream
+        if video:
+            input_stream = AudioVideoPiped(
+                file_path, MediumQualityAudio(), MediumQualityVideo()
+            )
+        else:
+            input_stream = AudioPiped(file_path, MediumQualityAudio())
+
+        # join vc
+        try:
+            await self.music.join_group_call(
+                chat_id, input_stream, stream_type=StreamType().pulse_stream
+            )
+        except NoActiveGroupCall:
+            try:
+                await self.join_gc(chat_id)
+            except Exception as e:
+                await self.leave_vc(chat_id)
+                raise JoinGCException(e)
+            try:
+                await self.music.join_group_call(
+                    chat_id, input_stream, stream_type=StreamType().pulse_stream
+                )
+            except Exception as e:
+                await self.leave_vc(chat_id)
+                raise JoinVCException(f"[JoinVCException]: {e}")
+        except AlreadyJoinedError:
+            raise UserException(
+                f"[UserException]: Already joined in the voice chat. If this is a mistake then try to restart the voice chat."
+            )
+        except Exception as e:
+            raise UserException(f"[UserException]: {e}")
+
+        await db.add_active_vc(chat_id, "video" if video else "voice")
+        self.audience[chat_id] = {}
+        users = await self.vc_participants(chat_id)
+        user_ids = [user.user_id for user in users]
+        await self.autoend(chat_id, user_ids)
+
+    async def join_gc(self, chat_id: int):
+        try:
+            try:
+                get = await Pbxbot.app.get_chat_member(chat_id, Pbxbot.user.id)
+            except ChatAdminRequired:
+                raise UserException(
+                    f"[UserException]: Bot is not admin in chat {chat_id}"
+                )
+            if (
+                get.status == ChatMemberStatus.RESTRICTED
+                or get.status == ChatMemberStatus.BANNED
+            ):
+                raise UserException(
+                    f"[UserException]: Assistant is restricted or banned in chat {chat_id}"
+                )
+        except UserNotParticipant:
+            chat = await Pbxbot.app.get_chat(chat_id)
+            if chat.username:
+                try:
+                    await Pbxbot.user.join_chat(chat.username)
+                except UserAlreadyParticipant:
+                    pass
+                except Exception as e:
+                    raise UserException(f"[UserException]: {e}")
+            else:
+                try:
+                    try:
+                        link = chat.invite_link
+                        if link is None:
+                            link = await Pbxbot.app.export_chat_invite_link(chat_id)
+                    except ChatAdminRequired:
+                        raise UserException(
+                            f"[UserException]: Bot is not admin in chat {chat_id}"
+                        )
+                    except Exception as e:
+                        raise UserException(f"[UserException]: {e}")
+                    Pbx = await Pbxbot.app.send_message(
+                        chat_id, "Inviting assistant to chat..."
+                    )
+                    if link.startswith("https://t.me/+"):
+                        link = link.replace("https://t.me/+", "https://t.me/joinchat/")
+                    await Pbxbot.user.join_chat(link)
+                    await Pbx.edit_text("Assistant joined the chat! Enjoy your music!")
+                except UserAlreadyParticipant:
+                    pass
+                except Exception as e:
+                    raise UserException(f"[UserException]: {e}")
 
 
-asyncio.create_task(end_inactive_vc())
-
-
-async def leaderboard():
-    context = {
-        "mention": Pbxbot.app.mention,
-        "username": Pbxbot.app.username,
-        "client": Pbxbot.app,
-    }
-    text = await leaders.generate(context)
-    btns = Buttons.close_markup()
-    await leaders.broadcast(Pbxbot, text, btns)
-
-
-hrs = leaders.get_hrs()
-min = leaders.get_min()
-
-scheduler = AsyncIOScheduler()
-scheduler.add_job(leaderboard, "cron", hour=hrs, minute=min, timezone=Config.TZ)
-scheduler.start()
+Pbxmusic = PbxMusic()
