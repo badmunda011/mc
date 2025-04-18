@@ -105,6 +105,47 @@ async def members_change(_, update: Update):
     except:
         return
 
+async def change_vc(self, chat_id: int):
+    try:
+        get = Queue.get_queue(chat_id)
+        if not get:
+            return await self.leave_vc(chat_id)
+
+        loop = await db.get_loop(chat_id)
+        if loop == 0:
+            file = Queue.rm_queue(chat_id, 0)
+            await self.autoclean(file)
+        else:
+            await db.set_loop(chat_id, loop - 1)
+
+        get = Queue.get_queue(chat_id)
+        if not get:
+            return await self.leave_vc(chat_id)
+
+        chat_id = get[0]["chat_id"]
+        queue = get[0]["file"]
+        title = get[0]["title"]
+        vc_type = get[0]["vc_type"]
+        video_id = get[0]["video_id"]
+
+        if not os.path.exists(queue):
+            raise ChangeVCException(f"File not found: {queue}")
+
+        if vc_type == "video":
+            input_stream = AudioVideoPiped(queue, MediumQualityAudio(), MediumQualityVideo())
+        else:
+            input_stream = AudioPiped(queue, MediumQualityAudio())
+
+        await self.music.change_stream(chat_id, input_stream)
+
+    except FileNotFoundError as e:
+        LOGS.error(f"File not found: {e}")
+        return await self.leave_vc(chat_id)
+
+    except Exception as e:
+        LOGS.error(e)
+        return await self.leave_vc(chat_id)
+
 
 async def update_played():
     while not await asyncio.sleep(1):
