@@ -57,12 +57,14 @@ class PbxMusic(PyTgCalls):
                 db.inactive[chat_id] = {}
 
     async def autoclean(self, file: str):
-        try:
-            os.remove(file)
-            os.remove(f"downloads/{file}.webm")
-            os.remove(f"downloads/{file}.mp4")
-        except:
-            pass
+        # Ensure file is a string
+        if isinstance(file, str):
+            try:
+                os.remove(file)
+                os.remove(f"downloads/{file}.webm")
+                os.remove(f"downloads/{file}.mp4")
+            except:
+                pass
 
     async def start(self):
         LOGS.info(
@@ -160,9 +162,11 @@ class PbxMusic(PyTgCalls):
         except Exception as e:
             LOGS.error(e)
             return await self.leave_vc(chat_id)
+
         get = Queue.get_queue(chat_id)
         if get == []:
             return await self.leave_vc(chat_id)
+
         chat_id = get[0]["chat_id"]
         duration = get[0]["duration"]
         queue = get[0]["file"]
@@ -170,10 +174,12 @@ class PbxMusic(PyTgCalls):
         user_id = get[0]["user_id"]
         vc_type = get[0]["vc_type"]
         video_id = get[0]["video_id"]
+
         try:
             user = (await Pbxbot.app.get_users(user_id)).mention(style="md")
         except:
             user = get[0]["user"]
+
         if queue:
             tg = True if video_id == "telegram" else False
             if tg:
@@ -182,12 +188,19 @@ class PbxMusic(PyTgCalls):
                 to_stream = await ytube.download(
                     video_id, True, True if vc_type == "video" else False
                 )
+
+            # Check if the file exists before streaming
+            if not os.path.exists(to_stream):
+                LOGS.error(f"File not found: {to_stream}")
+                raise ChangeVCException(f"[ChangeVCException]: File not found: {to_stream}")
+
             if vc_type == "video":
                 input_stream = AudioVideoPiped(
                     to_stream, MediumQualityAudio(), MediumQualityVideo()
                 )
             else:
                 input_stream = AudioPiped(to_stream, MediumQualityAudio())
+
             try:
                 photo = thumb.generate((359), (297, 302), video_id)
                 await self.music.change_stream(int(chat_id), input_stream)
@@ -239,7 +252,6 @@ class PbxMusic(PyTgCalls):
                 raise ChangeVCException(f"[ChangeVCException]: {e}")
 
     async def join_vc(self, chat_id: int, file_path: str, video: bool = False):
-        # define input stream
         if video:
             input_stream = AudioVideoPiped(
                 file_path, MediumQualityAudio(), MediumQualityVideo()
@@ -247,7 +259,6 @@ class PbxMusic(PyTgCalls):
         else:
             input_stream = AudioPiped(file_path, MediumQualityAudio())
 
-        # join vc
         try:
             await self.music.join_group_call(
                 chat_id, input_stream, stream_type=StreamType().pulse_stream
@@ -277,16 +288,6 @@ class PbxMusic(PyTgCalls):
         users = await self.vc_participants(chat_id)
         user_ids = [user.user_id for user in users]
         await self.autoend(chat_id, user_ids)
-
-    async def autoclean(self, file: str):
-        # Ensure file is a string
-        if isinstance(file, str):
-            try:
-                os.remove(file)
-                os.remove(f"downloads/{file}.webm")
-                os.remove(f"downloads/{file}.mp4")
-            except:
-                pass
 
     async def join_gc(self, chat_id: int):
         try:
